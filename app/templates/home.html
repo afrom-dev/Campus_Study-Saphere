@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}StudySphere - Learn with focus{% endblock %}
+
+{% block homepage_sidebar_preference %}
+{% if current_user.is_authenticated %}
+<script>
+    (function () {
+        var root = document.documentElement;
+        var collapsed = window.matchMedia('(max-width: 900px)').matches;
+        try {
+            var preference = localStorage.getItem('studysphere.sidebarCollapsed');
+            if (preference === 'true' || preference === 'false') {
+                collapsed = preference === 'true';
+            }
+        } catch (error) {
+            // Use the responsive default when storage is unavailable.
+        }
+        root.setAttribute('data-home-sidebar-collapsed', String(collapsed));
+    })();
+</script>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% if current_user.is_authenticated %}
+<main
+    class="learning-home home-chat-shell"
+    data-home-chat
+    data-csrf-token="{{ csrf_token() }}"
+    data-chat-history-url="{{ url_for('chat.chat_history') }}"
+    data-conversations-url="{{ url_for('chat.chat_conversations') }}"
+    data-default-semester="{{ current_user.semester }}"
+>
+    <aside class="home-chat-sidebar" id="home-chat-sidebar" aria-label="Chat history">
+        <button
+            type="button"
+            class="home-sidebar-collapse"
+            data-home-sidebar-collapse
+            aria-controls="home-chat-sidebar"
+            aria-expanded="true"
+            aria-label="Collapse chat history sidebar"
+            title="Collapse chat history sidebar"
+        >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 5h16v14H4zM10 5v14" />
+                <path d="m14 9 3 3-3 3" />
+            </svg>
+        </button>
+        <button
+            type="button"
+            class="btn btn-primary home-new-chat"
+            data-home-new-chat
+            aria-label="New chat"
+            title="New chat"
+        >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 5v14M5 12h14" />
+            </svg>
+            New chat
+        </button>
+        <label class="sr-only" for="home-chat-search">Search chat history</label>
+        <input
+            id="home-chat-search"
+            class="home-chat-search"
+            type="search"
+            placeholder="Search chats"
+            data-home-chat-search
+        >
+        <div
+            class="home-chat-list"
+            data-home-conversations
+            role="list"
+            aria-label="Saved conversations"
+        ></div>
+        <p class="home-chat-list-empty" data-home-conversations-empty>
+            No chats yet. Pick a topic and ask a question.
+        </p>
+    </aside>
+    <button
+        type="button"
+        class="home-sidebar-backdrop"
+        data-home-sidebar-backdrop
+        aria-label="Close chat history"
+    ></button>
+
+    <div class="home-main-content">
+    <header class="learning-home-header">
+        <button
+            type="button"
+            class="btn btn-outline home-sidebar-toggle"
+            data-home-sidebar-toggle
+            aria-label="Open chat history sidebar"
+            aria-controls="home-chat-sidebar"
+            aria-expanded="false"
+        >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 5h16v14H4zM10 5v14" />
+                <path d="m14 9 3 3-3 3" />
+            </svg>
+            Chat history
+        </button>
+        {% set first_name = current_user.name.strip().split()[0] if current_user.name.strip() else 'there' %}
+        <p
+            class="home-greeting"
+            data-home-greeting
+            data-first-name="{{ first_name }}"
+        >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="m12 2 1.65 6.35L20 10l-6.35 1.65L12 18l-1.65-6.35L4 10l6.35-1.65L12 2Z" />
+                <path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z" />
+            </svg>
+            <span data-home-greeting-text>Good day, {{ first_name }}</span>
+        </p>
+        <h1>What do you want to learn today?</h1>
+        <p>Choose a topic or your own material to start a study chat grounded in your notes.</p>
+    </header>
+
+    <section class="home-study-card" aria-label="Choose what to study">
+        <div class="home-select-grid">
+            <div class="home-field">
+                <label for="home-semester">Semester</label>
+                <select id="home-semester" data-home-semester>
+                    {% for semester in range(1, 9) %}
+                        <option value="{{ semester }}" {% if semester == current_user.semester %}selected{% endif %}>
+                            Semester {{ semester }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="home-field">
+                <label for="home-subject">Subject</label>
+                <select id="home-subject" data-home-subject disabled>
+                    <option value="">Choose a subject</option>
+                    <option value="__uploads__">My uploaded material</option>
+                </select>
+            </div>
+            <div class="home-field">
+                <label for="home-topic" data-home-topic-label>Topic</label>
+                <select id="home-topic" data-home-topic disabled>
+                    <option value="">Choose a topic</option>
+                </select>
+            </div>
+        </div>
+
+        <form class="home-chat-form" data-home-chat-form>
+            <label class="sr-only" for="home-question">Your study question</label>
+            <textarea
+                id="home-question"
+                name="question"
+                rows="3"
+                maxlength="500"
+                placeholder="Ask a question about your selected study material..."
+                data-home-question
+                required
+            ></textarea>
+            <div class="home-chat-actions">
+                <span>Answers are based on your selected note or material. Other answers are marked 'Not in your note'.</span>
+                <button type="submit" class="btn btn-primary" data-home-send>Send</button>
+            </div>
+        </form>
+
+        <div class="home-conversation-heading">
+            <h2>Study chat</h2>
+            <div>
+                <a class="btn btn-outline btn-sm" data-home-open-note hidden>Open full note</a>
+                <button type="button" class="btn btn-outline btn-sm" data-home-clear hidden>
+                    Clear chat
+                </button>
+            </div>
+        </div>
+        <p class="home-chat-hint" data-home-hint>
+            Choose a topic or your uploaded material above to start a grounded chat.
+        </p>
+        <p class="home-chat-status" data-home-status role="status" aria-live="polite"></p>
+        <div class="home-conversation" data-home-messages aria-live="polite"></div>
+    </section>
+
+    <section class="home-quick-section" aria-labelledby="home-quick-heading">
+        <h2 id="home-quick-heading">Your study shortcuts</h2>
+        <div class="home-quick-grid">
+            <a class="home-quick-card" href="{{ url_for('topics.semester_picker') }}">
+                <span aria-hidden="true">⌁</span>
+                <strong>Browse</strong>
+                <small>Explore your curriculum</small>
+            </a>
+            <a class="home-quick-card" href="{{ url_for('dashboard.index') }}">
+                <span aria-hidden="true">◷</span>
+                <strong>Dashboard</strong>
+                <small>Review your progress</small>
+            </a>
+            <a class="home-quick-card" href="{{ url_for('upload.history') }}">
+                <span aria-hidden="true">▤</span>
+                <strong>My material</strong>
+                <small>Open your uploads</small>
+            </a>
+            <a class="home-quick-card" href="{{ url_for('quiz.history') }}">
+                <span aria-hidden="true">✓</span>
+                <strong>History</strong>
+                <small>See your quiz attempts</small>
+            </a>
+            {% if last_attempt and last_attempt.topic %}
+                <a
+                    class="home-quick-card home-continue-card"
+                    href="{{ url_for('topics.topic_detail', topic_id=last_attempt.topic.id) }}"
+                >
+                    <span aria-hidden="true">↗</span>
+                    <strong>Continue where you left off</strong>
+                    <small>{{ last_attempt.topic.name }}</small>
+                </a>
+            {% endif %}
+        </div>
+    </section>
+    </div>
+</main>
+<script src="{{ url_for('static', filename='js/home.js') }}" defer></script>
+{% else %}
+<main class="guest-home">
+    <section class="guest-home-hero">
+        <p class="home-eyebrow">A calmer way to study</p>
+        <h1>Learn with clarity. Grow with confidence.</h1>
+        <p>
+            Explore your curriculum, study clear notes, and get personal practice
+            grounded in your course material.
+        </p>
+        <div class="guest-home-actions">
+            <a href="{{ url_for('auth.signup') }}" class="btn btn-primary btn-lg">Sign Up</a>
+            <a href="{{ url_for('auth.login') }}" class="btn btn-outline btn-lg">Login</a>
+        </div>
+    </section>
+    <section class="guest-home-features" aria-label="StudySphere features">
+        <article class="home-feature-card">
+            <span aria-hidden="true">📚</span>
+            <h2>Follow your curriculum</h2>
+            <p>Find subjects and topics organized by semester.</p>
+        </article>
+        <article class="home-feature-card">
+            <span aria-hidden="true">✦</span>
+            <h2>Ask grounded questions</h2>
+            <p>Study with answers based only on your notes and materials.</p>
+        </article>
+        <article class="home-feature-card">
+            <span aria-hidden="true">◷</span>
+            <h2>See your progress</h2>
+            <p>Practice with quizzes and keep track of your learning.</p>
+        </article>
+    </section>
+</main>
+{% endif %}
+{% endblock %}

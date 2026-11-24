@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+
+{% block title %}{{ topic.name }} - StudySphere Notes{% endblock %}
+
+{% block content %}
+<div class="topic-page-container">
+    <!-- Breadcrumb trail -->
+    <div class="breadcrumb-nav">
+        <a href="{{ url_for('topics.semester_picker') }}">Curriculum</a>
+        <span class="breadcrumb-separator">/</span>
+        <a href="{{ url_for('topics.semester_view', semester=topic.semester) }}">Semester {{ topic.semester }}</a>
+        <span class="breadcrumb-separator">/</span>
+        <a href="{{ url_for('topics.course_topics', course_id=topic.course_id) }}">{{ topic.course.title }}</a>
+        <span class="breadcrumb-separator">/</span>
+        <span class="breadcrumb-current">{{ topic.name }}</span>
+    </div>
+
+    <!-- AI Notes Banner (Requirement 5) -->
+    {% set is_ai_source = topic.content_source and (topic.content_source == 'ai_generated' or (topic.content_source.value is defined and topic.content_source.value == 'ai_generated')) %}
+    {% if is_ai_source and not topic.content_reviewed %}
+        <div class="ai-notes-banner alert alert-warning" role="alert">
+            <span class="ai-banner-icon">🤖</span>
+            <span class="ai-banner-text">AI-generated notes, not yet reviewed</span>
+        </div>
+    {% endif %}
+
+    <!-- Topic Hero Header -->
+    <header class="topic-header">
+        <div class="topic-header-meta">
+            <span class="badge badge-primary">{{ topic.course.title }}</span>
+            {% if topic.week %}
+                <span class="badge badge-subtle">Week {{ topic.week }}</span>
+            {% endif %}
+            <span class="badge badge-subtle">Semester {{ topic.semester }}</span>
+
+            <!-- Provenance Review Badge -->
+            {% if topic.content_reviewed %}
+                <span class="badge badge-success" title="Verified by academic instructor">
+                    Reviewed
+                </span>
+            {% endif %}
+        </div>
+
+        <div class="topic-title-row">
+            <h1 class="topic-title">{{ topic.name }}</h1>
+            <button
+                type="button"
+                class="btn btn-primary"
+                data-chat-open
+                aria-controls="study-chat-drawer"
+                aria-expanded="false"
+            >
+                <span aria-hidden="true">✦</span>
+                Ask AI
+            </button>
+        </div>
+
+        <div class="topic-stats-bar">
+            <div class="stat-item">
+                <span class="stat-label">Difficulty:</span>
+                <span class="difficulty-meter diff-{{ topic.difficulty }}">Level {{ topic.difficulty }} / 5</span>
+            </div>
+            {% if topic.content_source %}
+                <div class="stat-item">
+                    <span class="stat-label">Source:</span>
+                    <span class="text-capitalize">{{ topic.content_source.value if topic.content_source.value is defined else topic.content_source }}</span>
+                </div>
+            {% endif %}
+        </div>
+    </header>
+
+    <div class="topic-body-layout">
+        <!-- Main Notes Reader (Requirement 3 & 4) -->
+        <div class="notes-reader-wrapper">
+            <div class="notes-reader-card">
+                <div class="notes-reader-header">
+                    <h2 class="reader-heading">📖 Study Notes</h2>
+                    {% set display_reading_time = reading_time if reading_time is defined and reading_time else (topic.reading_time if topic is defined and topic.reading_time else None) %}
+                    {% if display_reading_time %}
+                        <span class="reader-reading-time">{{ display_reading_time }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="notes-content">
+                    {% if rendered_notes %}
+                        <article class="markdown-body">
+                            {{ rendered_notes | safe }}
+                        </article>
+                    {% else %}
+                        <!-- Friendly empty content message (Requirement 4) -->
+                        <div class="empty-notes-card">
+                            <div class="empty-notes-icon">📝</div>
+                            <h3 class="empty-notes-title">No study notes available yet</h3>
+                            <p class="empty-notes-text">
+                                Study notes for <strong>{{ topic.name }}</strong> have not been generated or uploaded yet. Check back soon as our curriculum database is updated.
+                            </p>
+                        </div>
+                    {% endif %}
+
+                    {% set link_resources = topic.resources | selectattr('type.value', 'equalto', 'link') | list %}
+                    {% if link_resources %}
+                        <section class="further-reading" aria-labelledby="further-reading-title">
+                            <h2 id="further-reading-title">Further reading</h2>
+                            <ul>
+                                {% for resource in link_resources %}
+                                    <li>
+                                        <a
+                                            href="{{ resource.url }}"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        >{{ resource.title }}</a>
+                                        <small>{{ resource.url.split('/')[2] | replace('www.', '') }}</small>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </section>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar: Prerequisites & Resources (Requirement 3) -->
+        <aside class="topic-sidebar">
+            <!-- Quiz Assessment Card (Requirement 5) -->
+            <div class="sidebar-card quiz-sidebar-card">
+                <h3 class="sidebar-card-title">📝 Topic Quiz</h3>
+                <p class="sidebar-card-desc">Evaluate your mastery of this concept:</p>
+
+                {% if recent_attempts %}
+                    <div class="sidebar-quiz-stats">
+                        <div class="quiz-stat-row">
+                            <span class="quiz-stat-label">Total Attempts:</span>
+                            <span class="quiz-stat-value font-bold">{{ attempt_count }}</span>
+                        </div>
+                        <div class="quiz-stat-row">
+                            <span class="quiz-stat-label">Last Score:</span>
+                            <span class="quiz-stat-value">
+                                {{ last_attempt.score if last_attempt.score % 1 != 0 else (last_attempt.score | int) }} / {{ last_attempt.total_questions }}
+                                {% if last_attempt.total_questions > 0 %}
+                                    ({{ ((last_attempt.score / last_attempt.total_questions * 100)) | round(0) | int }}%)
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% if topic_mastery_label %}
+                            <div class="quiz-stat-row" style="align-items: center;">
+                                <span class="quiz-stat-label">Topic mastery:</span>
+                                <span class="quiz-stat-value">
+                                    {% set lbl = topic_mastery_label.value if topic_mastery_label.value is defined else topic_mastery_label %}
+                                    {% if lbl == 'Weak' %}
+                                        <span class="badge badge-mastery-weak">Weak</span>
+                                    {% elif lbl == 'Good' %}
+                                        <span class="badge badge-mastery-good">Good</span>
+                                    {% elif lbl == 'Better' %}
+                                        <span class="badge badge-mastery-better">Better</span>
+                                    {% elif lbl == 'Excellent' %}
+                                        <span class="badge badge-mastery-excellent">Excellent</span>
+                                    {% else %}
+                                        <span class="badge badge-subtle">{{ lbl }}</span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div class="mastery-guidance text-xs text-muted" style="margin-top: 0.15rem; margin-bottom: 0.35rem; line-height: 1.3;">
+                                {{ topic_mastery_label | label_guidance }}
+                            </div>
+                        {% endif %}
+                        <div class="quiz-last-link">
+                            <a href="{{ url_for('quiz.attempt_result', attempt_id=last_attempt.id) }}" class="text-link small">
+                                View last attempt result &rarr;
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="topic-attempts-wrapper" style="margin-top: 0.85rem; margin-bottom: 0.85rem;">
+                        <div class="topic-attempts-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                            <h4 class="font-bold text-sm" style="margin: 0;">Your attempts</h4>
+                            {% if attempt_count > 5 %}
+                                <a href="{{ url_for('quiz.topic_quiz_history', topic_id=topic.id) }}" class="text-link text-xs">View all attempts &rarr;</a>
+                            {% endif %}
+                        </div>
+                        <div class="table-responsive" style="overflow-x: auto;">
+                            <table class="attempts-table" style="width: 100%; border-collapse: collapse; font-size: 0.78rem;">
+                                <thead>
+                                    <tr style="border-bottom: 1px solid var(--neutral-200); text-align: left; color: var(--neutral-600);">
+                                        <th style="padding: 0.35rem 0.25rem;">#</th>
+                                        <th style="padding: 0.35rem 0.25rem;">Date</th>
+                                        <th style="padding: 0.35rem 0.25rem;">Score</th>
+                                        <th style="padding: 0.35rem 0.25rem;">%</th>
+                                        <th style="padding: 0.35rem 0.25rem;">Label</th>
+                                        <th style="padding: 0.35rem 0.25rem;">Change</th>
+                                        <th style="padding: 0.35rem 0.25rem; text-align: right;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in recent_attempts %}
+                                        <tr style="border-bottom: 1px solid var(--neutral-100);">
+                                            <td style="padding: 0.35rem 0.25rem; font-weight: 600;">#{{ item.attempt.attempt_number }}</td>
+                                            <td style="padding: 0.35rem 0.25rem; color: var(--neutral-500); white-space: nowrap;">{{ item.attempt.created_at.strftime('%b %d') }}</td>
+                                            <td style="padding: 0.35rem 0.25rem; white-space: nowrap;">{{ item.attempt.score if item.attempt.score % 1 != 0 else (item.attempt.score | int) }} / {{ item.attempt.total_questions }}</td>
+                                            <td style="padding: 0.35rem 0.25rem; font-weight: 600;">{{ item.percentage }}%</td>
+                                            <td style="padding: 0.35rem 0.25rem;">
+                                                {% if item.attempt.label %}
+                                                    <span class="badge {{ item.attempt.label | label_badge_class }}" style="font-size: 0.68rem; padding: 0.15rem 0.35rem;">{{ item.attempt.label.value if item.attempt.label.value is defined else item.attempt.label }}</span>
+                                                {% else %}
+                                                    <span class="badge badge-subtle" style="font-size: 0.68rem; padding: 0.15rem 0.35rem;">Unrated</span>
+                                                {% endif %}
+                                            </td>
+                                            <td style="padding: 0.35rem 0.25rem; white-space: nowrap;">
+                                                {% if item.change is none %}
+                                                    <span class="text-muted">—</span>
+                                                {% elif item.change > 0 %}
+                                                    <span style="color: var(--success); font-weight: 600;">↑ +{{ item.change }}%</span>
+                                                {% elif item.change < 0 %}
+                                                    <span style="color: var(--danger); font-weight: 600;">↓ {{ item.change }}%</span>
+                                                {% else %}
+                                                    <span style="color: var(--neutral-500); font-weight: 600;">= 0.0%</span>
+                                                {% endif %}
+                                            </td>
+                                            <td style="padding: 0.35rem 0.25rem; text-align: right; white-space: nowrap;">
+                                                <a href="{{ url_for('quiz.attempt_result', attempt_id=item.attempt.id) }}" class="text-link small">View result</a>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% if attempt_count > 5 %}
+                            <div style="margin-top: 0.4rem; text-align: right;">
+                                <a href="{{ url_for('quiz.topic_quiz_history', topic_id=topic.id) }}" class="text-link small">View all attempts ({{ attempt_count }}) &rarr;</a>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="sidebar-empty-state">
+                        <span>No attempts yet. Test your knowledge!</span>
+                    </div>
+                {% endif %}
+
+                <div class="sidebar-quiz-actions">
+                    <a href="{{ url_for('quiz.topic_quiz', topic_id=topic.id) }}" class="btn btn-primary btn-block">
+                        Take Quiz
+                    </a>
+                </div>
+            </div>
+
+            {% set topic_lbl = topic_mastery_label.value if (topic_mastery_label and topic_mastery_label.value is defined) else (topic_mastery_label if topic_mastery_label else '') %}
+            {% if topic_lbl == 'Weak' %}
+                <!-- Revise these first card for Weak mastery -->
+                <div class="sidebar-card revise-first-card" style="border-left: 4px solid var(--danger);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.25rem;">
+                        <h3 class="sidebar-card-title" style="color: var(--danger); margin: 0;">⚠️ Revise these first</h3>
+                        <a href="{{ url_for('topics.revise_topic', topic_id=topic.id) }}" class="text-link small font-bold">
+                            See full list &rarr;
+                        </a>
+                    </div>
+                    <p class="sidebar-card-desc">Foundational gaps detected from your quiz performance:</p>
+
+                    {% if prereq_gaps %}
+                        <ul class="prereq-list" style="margin-top: 0.5rem;">
+                            {% for gap in prereq_gaps[:3] %}
+                                <li class="prereq-list-item" style="padding: 0.45rem 0;">
+                                    <a href="{{ url_for('topics.topic_detail', topic_id=gap.topic_id) }}" class="prereq-link">
+                                        <div class="prereq-link-name" style="font-weight: 600;">{{ gap.name }}</div>
+                                        <div class="prereq-link-course" style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.2rem;">
+                                            <span>{{ gap.course_name }}</span>
+                                            {% if gap.status == 'Weak' %}
+                                                <span class="badge badge-mastery-weak" style="font-size: 0.68rem; padding: 0.1rem 0.35rem;">Weak{% if gap.latest_percentage is not none %} ({{ gap.latest_percentage }}%){% endif %}</span>
+                                            {% else %}
+                                                <span class="badge badge-subtle" style="font-size: 0.68rem; padding: 0.1rem 0.35rem;">Not attempted</span>
+                                            {% endif %}
+                                        </div>
+                                    </a>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                        <div style="margin-top: 0.75rem; text-align: right;">
+                            <a href="{{ url_for('topics.revise_topic', topic_id=topic.id) }}" class="text-link small font-bold">
+                                See full list &rarr;
+                            </a>
+                        </div>
+                    {% else %}
+                        <p class="text-xs text-muted" style="margin: 0.4rem 0;">
+                            {% if not prereq_gaps.has_prerequisites %}
+                                This topic has no prerequisites.
+                            {% else %}
+                                Your prerequisites look fine. Review this topic's notes and retake the quiz.
+                            {% endif %}
+                        </p>
+                        <div style="margin-top: 0.5rem; text-align: right;">
+                            <a href="{{ url_for('topics.revise_topic', topic_id=topic.id) }}" class="text-link small font-bold">
+                                See full list &rarr;
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endif %}
+
+            <!-- Sidebar Recommendations Box -->
+            <div class="sidebar-card">
+                <h3 class="sidebar-card-title">💡 Related Topics</h3>
+                <p class="sidebar-card-desc">Concepts closely connected by content similarity:</p>
+
+                {% if related_topics %}
+                    <ul class="prereq-list">
+                        {% for rel in related_topics %}
+                            <li class="prereq-list-item">
+                                <a href="{{ url_for('topics.topic_detail', topic_id=rel.id) }}" class="prereq-link">
+                                    <div class="prereq-link-name" style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
+                                        <span>{{ rel.name }}</span>
+                                        {% if rel.label and rel.label != 'Not attempted' %}
+                                            <span class="badge {{ rel.label | label_badge_class }}" style="font-size: 0.68rem; padding: 0.1rem 0.35rem;">{{ rel.label }}</span>
+                                        {% else %}
+                                            <span class="badge badge-subtle" style="font-size: 0.68rem; padding: 0.1rem 0.35rem;">New</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="prereq-link-course">{{ rel.course }}{% if rel.week %} &bull; Wk {{ rel.week }}{% endif %} &bull; {{ (rel.score * 100) | round(0) | int }}% match</div>
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="sidebar-empty-state">
+                        <span>No related topics found.</span>
+                    </div>
+                {% endif %}
+            </div>
+            <!-- Concept Prerequisites Box -->
+            <div class="sidebar-card">
+                <h3 class="sidebar-card-title">🔗 Concept Prerequisites</h3>
+                <p class="sidebar-card-desc">Concepts recommended to master before studying this topic:</p>
+
+                {% if prerequisites %}
+                    <ul class="prereq-list">
+                        {% for prereq in prerequisites %}
+                            <li class="prereq-list-item">
+                                <a href="{{ url_for('topics.topic_detail', topic_id=prereq.id) }}" class="prereq-link">
+                                    <div class="prereq-link-name">{{ prereq.name }}</div>
+                                    <div class="prereq-link-course">{{ prereq.subject }} (Sem {{ prereq.semester }})</div>
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="sidebar-empty-state">
+                        <span>🌱 Foundational concept (no prior topic prerequisites required).</span>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Learning Resources Box -->
+            <div class="sidebar-card">
+                <h3 class="sidebar-card-title">📁 Attached Resources</h3>
+                <p class="sidebar-card-desc">Supplementary materials, diagrams, and external references:</p>
+
+                {% if resources %}
+                    <ul class="resource-list">
+                        {% for res in resources %}
+                            <li class="resource-item">
+                                <span class="resource-type-badge type-{{ res.type.value if res.type.value is defined else res.type }}">
+                                    {{ res.type.value if res.type.value is defined else res.type }}
+                                </span>
+                                <a href="{{ res.url }}" target="_blank" rel="noopener noreferrer" class="resource-link">
+                                    {{ res.title }} &nearr;
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="sidebar-empty-state">
+                        <span>No external reference files attached to this topic yet.</span>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Back to Course Link -->
+            <div class="sidebar-card back-card">
+                <a href="{{ url_for('topics.course_topics', course_id=topic.course_id) }}" class="btn btn-outline btn-block">
+                    ← Back to {{ topic.course.title }} topics
+                </a>
+            </div>
+        </aside>
+    </div>
+    {% include "chat/_drawer.html" with context %}
+</div>
+{% endblock %}

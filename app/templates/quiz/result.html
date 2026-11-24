@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}Quiz Results: {{ topic.name }} - StudySphere{% endblock %}
+
+{% block content %}
+<div class="quiz-container">
+    <!-- Breadcrumb navigation -->
+    <div class="breadcrumb-nav">
+        <a href="{{ url_for('topics.semester_picker') }}">Curriculum</a>
+        <span class="breadcrumb-separator">/</span>
+        <a href="{{ url_for('topics.semester_view', semester=topic.semester) }}">Semester {{ topic.semester }}</a>
+        <span class="breadcrumb-separator">/</span>
+        <a href="{{ url_for('topics.course_topics', course_id=topic.course_id) }}">{{ topic.course.title }}</a>
+        <span class="breadcrumb-separator">/</span>
+        <a href="{{ url_for('topics.topic_detail', topic_id=topic.id) }}">{{ topic.name }}</a>
+        <span class="breadcrumb-separator">/</span>
+        <span class="breadcrumb-current">Attempt #{{ attempt.attempt_number }} Results</span>
+    </div>
+
+    <!-- Results Score Card -->
+    <header class="quiz-result-hero">
+        <div class="result-hero-meta">
+            <span class="badge badge-primary">{{ topic.course.title }}</span>
+            <span class="badge badge-subtle">Semester {{ topic.semester }}</span>
+            <span class="badge badge-subtle">Attempt #{{ attempt.attempt_number }}</span>
+            <span class="badge badge-subtle">{{ attempt.created_at.strftime('%b %d, %Y %H:%M') }}</span>
+        </div>
+
+        <h1 class="result-title">Quiz Results: {{ topic.name }}</h1>
+
+        {% if has_ungraded_theory %}
+            <div class="alert alert-warning theory-grading-alert" style="margin-top: 1rem; margin-bottom: 1.5rem; border-left: 4px solid #f59e0b; padding: 0.85rem 1.25rem; background: rgba(245, 158, 11, 0.12); border-radius: 6px;">
+                <strong>Notice:</strong> Rate your theory answers to complete your score
+            </div>
+        {% endif %}
+
+        <div class="result-score-grid">
+            <div class="score-card">
+                <span class="score-label">Score</span>
+                <span class="score-value">{{ attempt.score if attempt.score % 1 != 0 else (attempt.score | int) }} <span class="score-denominator">/ {{ attempt.total_questions }}</span></span>
+            </div>
+
+            <div class="score-card">
+                <span class="score-label">Percentage</span>
+                <span class="score-value">{{ percentage }}<span class="score-percent-symbol">%</span></span>
+            </div>
+
+            <div class="score-card">
+                <span class="score-label">Incorrect</span>
+                <span class="score-value">{{ attempt.wrong_count if attempt.wrong_count % 1 != 0 else (attempt.wrong_count | int) }}</span>
+            </div>
+
+            <div class="score-card score-card-mastery">
+                <span class="score-label">Mastery Level</span>
+                <span class="score-tier">
+                    {% if attempt.label %}
+                        {% set lbl = attempt.label.value if attempt.label.value is defined else attempt.label %}
+                        {% if lbl == 'Weak' %}
+                            <span class="badge badge-mastery-weak">Weak</span>
+                        {% elif lbl == 'Good' %}
+                            <span class="badge badge-mastery-good">Good</span>
+                        {% elif lbl == 'Better' %}
+                            <span class="badge badge-mastery-better">Better</span>
+                        {% elif lbl == 'Excellent' %}
+                            <span class="badge badge-mastery-excellent">Excellent</span>
+                        {% else %}
+                            <span class="badge badge-subtle">{{ lbl }}</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="badge badge-subtle">Unrated</span>
+                    {% endif %}
+                </span>
+                {% if attempt.label %}
+                    <p class="mastery-guidance text-xs text-muted" style="margin-top: 0.35rem; line-height: 1.3;">
+                        {{ attempt.label | label_guidance }}
+                    </p>
+                {% endif %}
+            </div>
+
+            <div class="score-card score-card-mastery">
+                <span class="score-label">Topic mastery</span>
+                <span class="score-tier">
+                    {% if topic_mastery_label %}
+                        <span class="badge {{ topic_mastery_label | label_badge_class }}">
+                            {{ topic_mastery_label.value if topic_mastery_label.value is defined else topic_mastery_label }}
+                        </span>
+                    {% else %}
+                        <span class="badge badge-subtle">No label</span>
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+    </header>
+
+    {% set topic_lbl = topic_mastery_label.value if (topic_mastery_label and topic_mastery_label.value is defined) else (topic_mastery_label if topic_mastery_label else '') %}
+    {% if topic_lbl == 'Weak' %}
+        <!-- Revise these first card for Weak mastery -->
+        <section class="revise-first-card" style="margin-top: 1.5rem; margin-bottom: 2rem; background: var(--bg-surface); border: 1px solid var(--danger-border); border-left: 4px solid var(--danger); border-radius: var(--radius); padding: 1.25rem 1.5rem; box-shadow: var(--shadow-sm);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+                <h2 style="font-size: 1.15rem; font-weight: 700; color: var(--danger); margin: 0; display: flex; align-items: center; gap: 0.4rem;">
+                    <span>⚠️ Revise these first</span>
+                </h2>
+                <a href="{{ url_for('topics.revise_topic', topic_id=topic.id) }}" class="text-link small font-bold">
+                    See full list &rarr;
+                </a>
+            </div>
+
+            {% if prereq_gaps %}
+                <p class="text-xs text-muted" style="margin: 0 0 0.85rem 0;">
+                    Foundational concept gaps were detected in your attempt. Master these prerequisites before retaking this quiz:
+                </p>
+                <ul class="revise-card-list" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem;">
+                    {% for gap in prereq_gaps[:3] %}
+                        <li style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.75rem; background: var(--neutral-50); border: 1px solid var(--neutral-200); border-radius: var(--radius-sm); gap: 0.75rem; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+                                <span class="badge badge-subtle" style="font-size: 0.68rem; font-weight: 700;">#{{ loop.index }}</span>
+                                <a href="{{ url_for('topics.topic_detail', topic_id=gap.topic_id) }}" class="font-bold text-sm" style="color: var(--neutral-900); text-decoration: none;">
+                                    {{ gap.name }}
+                                </a>
+                                <span class="text-xs text-muted">({{ gap.course_name }})</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                {% if gap.status == 'Weak' %}
+                                    <span class="badge badge-mastery-weak" style="font-size: 0.7rem;">
+                                        Weak{% if gap.latest_percentage is not none %} ({{ gap.latest_percentage }}%){% endif %}
+                                    </span>
+                                {% else %}
+                                    <span class="badge badge-subtle" style="font-size: 0.7rem;">Not attempted</span>
+                                {% endif %}
+                                <a href="{{ url_for('topics.topic_detail', topic_id=gap.topic_id) }}" class="btn btn-sm btn-outline" style="font-size: 0.72rem; padding: 0.2rem 0.5rem;">Notes</a>
+                                <a href="{{ url_for('quiz.topic_quiz', topic_id=gap.topic_id) }}" class="btn btn-sm btn-primary" style="font-size: 0.72rem; padding: 0.2rem 0.5rem;">Quiz</a>
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+                <div style="margin-top: 0.85rem; text-align: right;">
+                    <a href="{{ url_for('topics.revise_topic', topic_id=topic.id) }}" class="text-link small font-bold">
+                        See full list &rarr;
+                    </a>
+                </div>
+            {% else %}
+                <p class="text-sm text-muted" style="margin: 0;">
+                    {% if not prereq_gaps.has_prerequisites %}
+                        This topic has no prerequisites. Review this topic's notes and retake the quiz.
+                    {% else %}
+                        Your prerequisites look fine. Review this topic's notes and retake the quiz.
+                    {% endif %}
+                </p>
+                <div style="margin-top: 0.6rem; text-align: right;">
+                    <a href="{{ url_for('topics.revise_topic', topic_id=topic.id) }}" class="text-link small font-bold">
+                        See full list &rarr;
+                    </a>
+                </div>
+            {% endif %}
+        </section>
+    {% endif %}
+
+    <!-- Question by Question Review -->
+    <section class="quiz-review-section">
+        <div class="review-header">
+            <h2 class="review-title">Detailed Question Review</h2>
+            <p class="review-desc">Review your answers alongside the ground-truth and instructor reference models:</p>
+        </div>
+
+        <div class="quiz-questions-list">
+            {% for item in details %}
+                <div class="quiz-question-card {% if item.is_correct is true %}result-card-correct{% elif item.is_correct is false %}result-card-wrong{% else %}result-card-theory{% endif %}">
+                    <div class="quiz-card-top">
+                        <span class="quiz-q-num">Question {{ loop.index }} of {{ details | length }}</span>
+                        
+                        {% if item.is_correct is true %}
+                            <span class="badge badge-success">✓ Correct</span>
+                        {% elif item.is_correct is false %}
+                            <span class="badge badge-danger">✗ Incorrect</span>
+                        {% elif item.question_type == 'theory' %}
+                            {% if item.self_rating == 'got_it' %}
+                                <span class="badge badge-success">✓ Got it (+1.0 pt)</span>
+                            {% elif item.self_rating == 'partly' %}
+                                <span class="badge badge-warning">½ Partly (+0.5 pt)</span>
+                            {% elif item.self_rating == 'missed' %}
+                                <span class="badge badge-danger">✗ Missed (0 pt)</span>
+                            {% else %}
+                                <span class="badge badge-warning">📖 Theory Model Answer</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="badge badge-warning">📖 Reference Answer</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="quiz-q-body">
+                        <p class="quiz-question-text">{{ item.question_text }}</p>
+                    </div>
+
+                    <div class="result-answers-comparison">
+                        <!-- Student Answer -->
+                        <div class="result-answer-block {% if item.is_correct is true %}answer-block-correct{% elif item.is_correct is false %}answer-block-wrong{% else %}answer-block-student{% endif %}">
+                            <span class="answer-block-label">Your Submitted Answer:</span>
+                            <div class="answer-block-text">
+                                {% if item.student_answer %}
+                                    {{ item.student_answer }}
+                                {% else %}
+                                    <em class="text-muted">(No answer submitted)</em>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Correct / Model Answer -->
+                        <div class="result-answer-block answer-block-groundtruth">
+                            <span class="answer-block-label">
+                                {% if item.is_correct is none %}
+                                    Instructor Model Answer:
+                                {% else %}
+                                    Correct Answer:
+                                {% endif %}
+                            </span>
+                            <div class="answer-block-text">
+                                {% if item.question_type == 'short' and item.correct_answer and '|' in item.correct_answer %}
+                                    {{ item.formatted_correct_answer if item.formatted_correct_answer is defined else (item.correct_answer.split('|') | map('trim') | reject('equalto', '') | join(' or ')) }}
+                                {% else %}
+                                    {{ item.correct_answer }}
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if item.question_type == 'theory' %}
+                        <div class="theory-self-grade-box" style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px dashed var(--border-color, #e5e7eb);">
+                            <div class="self-grade-header" style="margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+                                <span class="font-bold text-sm">Self-Assessment:</span>
+                                {% if item.self_rating %}
+                                    <span class="text-xs text-muted">
+                                        Current rating: <strong>{{ 'Got it (1 point)' if item.self_rating == 'got_it' else ('Partly (0.5)' if item.self_rating == 'partly' else 'Missed (0)') }}</strong>
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <form method="POST" action="{{ url_for('quiz.self_grade', attempt_id=attempt.id) }}" class="self-grade-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="question_id" value="{{ item.question_id }}">
+                                <div class="btn-group self-grade-btn-group" role="group" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                    <button type="submit" name="rating" value="got_it" class="btn btn-sm {% if item.self_rating == 'got_it' %}btn-success{% else %}btn-outline{% endif %}">
+                                        Got it (1 point)
+                                    </button>
+                                    <button type="submit" name="rating" value="partly" class="btn btn-sm {% if item.self_rating == 'partly' %}btn-warning{% else %}btn-outline{% endif %}">
+                                        Partly (0.5)
+                                    </button>
+                                    <button type="submit" name="rating" value="missed" class="btn btn-sm {% if item.self_rating == 'missed' %}btn-danger{% else %}btn-outline{% endif %}">
+                                        Missed (0)
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+
+        <!-- Result Action Bar -->
+        <div class="quiz-submit-bar">
+            <a href="{{ url_for('quiz.topic_quiz', topic_id=topic.id) }}" class="btn btn-primary btn-lg">
+                Retake Quiz
+            </a>
+            <a href="{{ url_for('topics.topic_detail', topic_id=topic.id) }}" class="btn btn-outline">
+                Back to {{ topic.name }} Notes
+            </a>
+        </div>
+    </section>
+</div>
+{% endblock %}
